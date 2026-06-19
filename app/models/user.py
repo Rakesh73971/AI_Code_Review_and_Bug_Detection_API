@@ -2,6 +2,7 @@ from db.database import Base
 from sqlalchemy import Column,Integer,String,TIMESTAMP,text
 from enum import Enum as PyEnum
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.orm import relationship
 
 class UserRole(PyEnum):
     ADMIN = "admin"
@@ -19,3 +20,6 @@ class User(Base):
     github_name = Column(String,nullable=True)
     is_active = Column(String,server_default="True",nullable=False)
     created_at = Column(TIMESTAMP(timezone=True),server_default=text('now()'),nullable=False)
+
+    reviews = relationship("CodeReview",back_populates="user")
+    sessions = relationship("CodebaseSession",back_populates="user")
