@@ -43,8 +43,10 @@ redis==5.2.1
 # SSE Streaming
 sse-starlette
 
-# HTTP
+# HTTP / Scraping
 httpx
+beautifulsoup4
+lxml
 
 # Testing
 pytest
