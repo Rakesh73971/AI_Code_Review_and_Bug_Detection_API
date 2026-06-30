@@ -12,8 +12,8 @@ class Language(PyEnum):
 
 
 class ReviewSource(PyEnum):
-    manual = "MANUAL"
-    GITHUB_PR =  "github_pr"
+    MANUAL = "MANUAL"
+    GITHUB_PR = "github_pr"
 
 
 

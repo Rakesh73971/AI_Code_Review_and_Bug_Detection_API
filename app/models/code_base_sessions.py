@@ -21,4 +21,4 @@ class CodebaseSession(Base):
     task_id = Column(String,nullable=False)
     created_at = Column(TIMESTAMP(timezone=True),server_default=text("now()"),nullable=False)
     user = relationship("User",back_populates="sessions")
-    messages = relationship("ChatMessage",back_populates="sessions")
+    messages = relationship("ChatMessage",back_populates="session")
