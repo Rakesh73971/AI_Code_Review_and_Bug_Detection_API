@@ -1,10 +1,9 @@
 from fastapi import FastAPI
 from app.db.database import Base, engine
 from app.routers import user, oauth, code_review, codebase_session, chat_message, rag
-from app.models import user as user_model
-from app.models import code_review as code_review_model
-from app.models import code_base_sessions as codebase_session_model
-from app.models import chat_messages as chat_message_model
+from . import models
+
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Code Review and Bug Detection")
 
