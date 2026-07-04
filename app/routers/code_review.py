@@ -1,5 +1,6 @@
-from fastapi import APIRouter, status, Depends
+from fastapi import APIRouter, status, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
+from jose import jwt
 from typing import List
 from app.db.database import get_db
 from app.core.oauth2 import get_current_user
@@ -73,4 +74,121 @@ def delete_code_review(
     current_user: User = Depends(get_current_user),
 ):
     return delete_code_review_service(db, review_id, current_user)
+
+
+def get_ws_user(token: str, db: Session) -> User:
+    from app.core.oauth2 import SECRET_KEY, ALGORITHM
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        if not user_id:
+            return None
+        return db.query(User).filter(User.id == user_id).first()
+    except Exception:
+        return None
+
+
+@router.websocket("/ws")
+async def ws_code_review(websocket: WebSocket, token: str = None, db: Session = Depends(get_db)):
+    await websocket.accept()
+    user = None
+    if token:
+        user = get_ws_user(token, db)
+    if not user:
+        await websocket.send_json({"error": "Unauthorized token"})
+        await websocket.close()
+        return
+        
+    try:
+        while True:
+            data = await websocket.receive_json()
+            language = data.get("language")
+            code = data.get("code")
+            use_rag = data.get("use_rag", True)
+            
+            if not language or not code:
+                await websocket.send_json({"error": "Missing language or code"})
+                continue
+                
+            # 1. Fetch RAG context and details
+            doc_context = "No documentation context available."
+            doc_sources = []
+            if use_rag:
+                try:
+                    from app.ai.rag.retriever import retrieve_doc_context
+                    doc_context, doc_sources = retrieve_doc_context(code[:800], language)
+                except Exception:
+                    pass
+            
+            # Send a start message
+            await websocket.send_json({"type": "start"})
+            
+            # 2. Setup prompt and stream target model
+            from app.ai.llm import get_llm
+            from langchain_core.prompts import ChatPromptTemplate
+            
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", "You are an expert code reviewer and bug detection assistant. Review the user's code for bugs, security issues, performance issues, and style violations. Frame your answer in clean Markdown, including Bug Findings (with line numbers if possible), Severity Summary (critical/warning/info count), Suggestions, and a Quality Score (0-100). Use the documentation context to ground your review."),
+                    ("human", "Language: {language}\n\nDocumentation Context:\n{doc_context}\n\nCode to review:\n```{language}\n{code}\n```"),
+                ]
+            )
+            
+            chain = prompt | get_llm()
+            full_review_text = []
+            async for chunk in chain.astream({"language": language, "doc_context": doc_context, "code": code}):
+                content = chunk.content if hasattr(chunk, "content") else str(chunk)
+                if isinstance(content, list):
+                    texts = []
+                    for part in content:
+                        if isinstance(part, str):
+                            texts.append(part)
+                        elif isinstance(part, dict) and "text" in part:
+                            texts.append(part["text"])
+                    content = "".join(texts)
+                
+                await websocket.send_json({"type": "token", "token": content})
+                full_review_text.append(content)
+            
+            accumulated_text = "".join(full_review_text)
+            
+            # 3. Trigger structured analysis in the background to persist review in Postgres
+            from app.ai.schemas.review_output import ReviewOutput
+            try:
+                structured_llm = get_llm().with_structured_output(ReviewOutput)
+                extraction_prompt = ChatPromptTemplate.from_messages([
+                    ("system", "You are an assistant that extracts code review results into a structured format. Extract the bugs found, severity summary, suggestions, and quality score from the review text."),
+                    ("human", "Review text:\n{review_text}")
+                ])
+                extraction_chain = extraction_prompt | structured_llm
+                structured_res = extraction_chain.invoke({"review_text": accumulated_text})
+                
+                # Save database record
+                from app.models.code_review import CodeReview, ReviewSource
+                db_review = CodeReview(
+                    user_id=user.id,
+                    language=language,
+                    original_code=code,
+                    bugs_found=[bug.model_dump() for bug in structured_res.bugs_found] if hasattr(structured_res, "bugs_found") else None,
+                    severity_summary=structured_res.severity_summary.model_dump() if hasattr(structured_res, "severity_summary") else None,
+                    suggestions=structured_res.suggestions if hasattr(structured_res, "suggestions") else None,
+                    quality_score=structured_res.quality_score if hasattr(structured_res, "quality_score") else None,
+                    doc_sources_used=doc_sources,
+                    source=ReviewSource.MANUAL
+                )
+                db.add(db_review)
+                db.commit()
+                db.refresh(db_review)
+                
+                await websocket.send_json({"type": "done", "review_id": db_review.id})
+            except Exception as exc:
+                await websocket.send_json({"type": "done", "error": f"Failed to save review details: {exc}"})
+                
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        try:
+            await websocket.send_json({"error": str(exc)})
+        except Exception:
+            pass
 
