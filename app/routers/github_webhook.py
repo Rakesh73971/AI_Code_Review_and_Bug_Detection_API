@@ -81,10 +81,12 @@ async def github_webhook_handler(
             )
 
     # 2. Get GITHUB_TOKEN
-    token = settings.github_token
+    import os
+    token = os.getenv("GITHUB_TOKEN")
     headers = {}
     if token and "your_github" not in token:
         headers["Authorization"] = f"token {token}"
+
     
     # Fetch pull request files
     github_api_base = f"https://api.github.com/repos/{repo_full_name}"
