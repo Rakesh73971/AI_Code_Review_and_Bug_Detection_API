@@ -1,10 +1,12 @@
 from fastapi import APIRouter, status, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from jose import jwt
 from typing import List
 from app.db.database import get_db
-from app.core.oauth2 import get_current_user
+from app.core.oauth2 import get_current_user, get_admin_user
 from app.models.user import User
+from app.models.code_review import CodeReview
 from app.schemas.code_review import CodeReviewCreate, CodeReviewUpdate, CodeReviewResponse
 from app.ai.schemas.review_output import CodeReviewRequest
 from app.ai.services.review_ai_service import analyze_code_service
@@ -29,6 +31,50 @@ def analyze_code(
     current_user: User = Depends(get_current_user),
 ):
     return analyze_code_service(db, request, current_user)
+
+
+@router.get("/analytics", status_code=status.HTTP_200_OK)
+def get_code_review_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    # Total reviews
+    total_reviews = db.query(CodeReview).count()
+    
+    # Average quality score
+    avg_score_res = db.query(func.avg(CodeReview.quality_score)).scalar()
+    average_quality_score = float(avg_score_res) if avg_score_res is not None else 0.0
+
+    # Counts by language
+    lang_counts = db.query(CodeReview.language, func.count(CodeReview.id)).group_by(CodeReview.language).all()
+    language_distribution = {
+        lang.value if hasattr(lang, "value") else str(lang): count for lang, count in lang_counts
+    }
+
+    # Counts by source (MANUAL vs. GITHUB_PR)
+    src_counts = db.query(CodeReview.source, func.count(CodeReview.id)).group_by(CodeReview.source).all()
+    source_distribution = {
+        src.value if hasattr(src, "value") else str(src): count for src, count in src_counts
+    }
+
+    # Get severity counts from JSON summaries
+    all_reviews = db.query(CodeReview.severity_summary).all()
+    severity_totals = {"critical": 0, "warning": 0, "info": 0}
+    for (summary,) in all_reviews:
+        if summary:
+            if isinstance(summary, dict):
+                severity_totals["critical"] += summary.get("critical", 0)
+                severity_totals["warning"] += summary.get("warning", 0)
+                severity_totals["info"] += summary.get("info", 0)
+
+    return {
+        "total_reviews": total_reviews,
+        "average_quality_score": round(average_quality_score, 1),
+        "bug_severity_summary": severity_totals,
+        "language_distribution": language_distribution,
+        "source_distribution": source_distribution
+    }
+
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=CodeReviewResponse)
