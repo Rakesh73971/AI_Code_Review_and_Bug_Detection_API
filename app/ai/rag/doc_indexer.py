@@ -5,25 +5,16 @@ from app.ai.rag.vectorstore import get_docs_vectorstore
 LANGUAGE_DOC_SOURCES = {
     "python": [
         "https://docs.python.org/3/tutorial/errors.html",
-        "https://docs.python.org/3/library/exceptions.html",
     ],
     "javascript": [
-        "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Control_flow_and_error_handling",
-    ],
-    "sql": [
-        "https://www.postgresql.org/docs/current/sql-syntax.html",
-    ],
-    "java": [
-        "https://docs.oracle.com/javase/tutorial/essential/exceptions/",
-    ],
+        "https://fastapi.tiangolo.com/tutorial/first-steps/",
+    ]
 }
 
 FRAMEWORK_DOC_URLS = [
     "https://fastapi.tiangolo.com/tutorial/first-steps/",
-    "https://fastapi.tiangolo.com/tutorial/security/",
-    "https://docs.djangoproject.com/en/stable/topics/http/urls/",
-    "https://docs.djangoproject.com/en/stable/topics/db/models/",
 ]
+
 
 
 def _load_url_documents(urls: list[str], source: str) -> list[Document]:
@@ -52,15 +43,28 @@ def index_official_docs() -> dict:
 
     vectorstore = get_docs_vectorstore()
     try:
-        vectorstore.delete_collection()
+        existing = vectorstore.get()
+        if existing and existing.get("ids"):
+            vectorstore.delete(ids=existing["ids"])
     except Exception:
         pass
 
     vectorstore = get_docs_vectorstore()
-    vectorstore.add_documents(chunks)
+
+    
+    # Safe batching to prevent Gemini Embeddings 429 rate limit
+    import time
+    batch_size = 40
+    delay = 2.0
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i + batch_size]
+        vectorstore.add_documents(batch)
+        if i + batch_size < len(chunks):
+            time.sleep(delay)
 
     return {
         "documents_loaded": len(all_docs),
         "chunks_indexed": len(chunks),
         "collection": vectorstore._collection.name,
     }
+
