@@ -37,14 +37,27 @@ def upload_codebase(
     return upload_and_index_codebase_service(db, project_name, file, current_user)
 
 
-@router.post("/{session_id}/ask", status_code=status.HTTP_200_OK, response_model=ChatResponse)
+from fastapi.responses import PlainTextResponse
+
+@router.post("/{session_id}/ask", status_code=status.HTTP_200_OK)
 def ask_codebase(
     session_id: int,
     request: ChatRequest,
+    format: str = "json",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return ask_codebase_service(db, session_id, request, current_user)
+    res = ask_codebase_service(db, session_id, request, current_user)
+    if format.lower() == "text":
+        output = [res.answer, "\n\n--- Source Documents Used ---"]
+        for idx, src in enumerate(res.doc_sources):
+            output.append(f"\n{idx+1}. File: {src.get('source')}")
+            snippet = src.get('snippet')
+            if snippet:
+                output.append(f"\nSnippet:\n{snippet}\n")
+        return PlainTextResponse("".join(output))
+    return res
+
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=CodebaseSessionResponse)

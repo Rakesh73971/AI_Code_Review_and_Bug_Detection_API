@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class BugFinding(BaseModel):
+    
     line: Optional[int] = None
     severity: str = Field(description="One of: critical, warning, info")
     description: str
