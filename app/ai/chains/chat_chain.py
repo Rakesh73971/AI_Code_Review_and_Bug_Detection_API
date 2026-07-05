@@ -36,4 +36,13 @@ def run_chat_chain(
         }
     )
     answer = response.content if hasattr(response, "content") else str(response)
+    if isinstance(answer, list):
+        texts = []
+        for part in answer:
+            if isinstance(part, str):
+                texts.append(part)
+            elif isinstance(part, dict) and "text" in part:
+                texts.append(part["text"])
+        answer = "".join(texts)
     return answer, doc_sources
+
