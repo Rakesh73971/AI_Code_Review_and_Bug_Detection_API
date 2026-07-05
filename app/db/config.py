@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -12,9 +13,14 @@ class Settings(BaseSettings):
     algorithm: str
     access_token_expire_minutes: int
     google_api_key: str
-    gemini_model: str = "models/gemini-3.5-flash"
+    github_token: Optional[str] = None
+    gemini_model: str = "gemini-2.5-flash"
+
     gemini_embedding_model: str = "models/gemini-embedding-001"
     chroma_persist_dir: str = "./chroma_data"
+
+
+
     docs_collection_name: str = "official_docs"
 
 settings = Settings()
