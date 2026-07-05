@@ -43,11 +43,24 @@ def index_codebase_zip(collection_name: str, zip_bytes: bytes) -> dict:
 
     vectorstore = get_codebase_vectorstore(collection_name)
     try:
-        vectorstore.delete_collection()
+        existing = vectorstore.get()
+        if existing and existing.get("ids"):
+            vectorstore.delete(ids=existing["ids"])
     except Exception:
         pass
 
     vectorstore = get_codebase_vectorstore(collection_name)
-    vectorstore.add_documents(chunks)
+
+    
+    # Safe batching to prevent Gemini Embeddings 429 rate limit
+    import time
+    batch_size = 40
+    delay = 2.0
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i + batch_size]
+        vectorstore.add_documents(batch)
+        if i + batch_size < len(chunks):
+            time.sleep(delay)
 
     return {"file_count": len(code_files), "chunks_indexed": len(chunks)}
+
