@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.db.database import Base, engine
-from app.routers import user, oauth, code_review, codebase_session, chat_message, rag
+from app.routers import user, oauth, code_review, codebase_session, chat_message, rag, github_webhook
 from . import models
 
 models.Base.metadata.create_all(bind=engine)
@@ -13,6 +13,8 @@ app.include_router(code_review.router)
 app.include_router(codebase_session.router)
 app.include_router(chat_message.router)
 app.include_router(rag.router)
+app.include_router(github_webhook.router)
+
 
 
 @app.on_event("startup")
