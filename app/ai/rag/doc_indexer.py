@@ -5,14 +5,19 @@ from app.ai.rag.vectorstore import get_docs_vectorstore
 LANGUAGE_DOC_SOURCES = {
     "python": [
         "https://docs.python.org/3/tutorial/errors.html",
+        "https://docs.python.org/3/tutorial/controlflow.html",
     ],
     "javascript": [
-        "https://fastapi.tiangolo.com/tutorial/first-steps/",
+        "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Control_flow_and_error_handling",
+        "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Functions",
     ]
 }
 
 FRAMEWORK_DOC_URLS = [
     "https://fastapi.tiangolo.com/tutorial/first-steps/",
+    "https://fastapi.tiangolo.com/tutorial/query-params/",
+    "https://docs.djangoproject.com/en/5.0/intro/tutorial01/",
+    "https://docs.djangoproject.com/en/5.0/intro/tutorial02/",
 ]
 
 
