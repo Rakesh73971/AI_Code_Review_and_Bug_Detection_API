@@ -148,12 +148,21 @@ async def ws_code_review(websocket: WebSocket, token: str = None, db: Session = 
     try:
         while True:
             data = await websocket.receive_json()
-            language = data.get("language")
+            language_str = data.get("language")
             code = data.get("code")
             use_rag = data.get("use_rag", True)
             
-            if not language or not code:
+            if not language_str or not code:
                 await websocket.send_json({"error": "Missing language or code"})
+                continue
+            
+            from app.models.code_review import Language
+            try:
+                lang_enum = Language(language_str.lower())
+            except ValueError:
+                await websocket.send_json({
+                    "error": f"Unsupported language: {language_str}. Supported: {[e.value for e in Language]}"
+                })
                 continue
                 
             # 1. Fetch RAG context and details
@@ -162,7 +171,7 @@ async def ws_code_review(websocket: WebSocket, token: str = None, db: Session = 
             if use_rag:
                 try:
                     from app.ai.rag.retriever import retrieve_doc_context
-                    doc_context, doc_sources = retrieve_doc_context(code[:800], language)
+                    doc_context, doc_sources = retrieve_doc_context(code[:800], lang_enum.value)
                 except Exception:
                     pass
             
@@ -182,7 +191,7 @@ async def ws_code_review(websocket: WebSocket, token: str = None, db: Session = 
             
             chain = prompt | get_llm()
             full_review_text = []
-            async for chunk in chain.astream({"language": language, "doc_context": doc_context, "code": code}):
+            async for chunk in chain.astream({"language": lang_enum.value, "doc_context": doc_context, "code": code}):
                 content = chunk.content if hasattr(chunk, "content") else str(chunk)
                 if isinstance(content, list):
                     texts = []
@@ -213,7 +222,7 @@ async def ws_code_review(websocket: WebSocket, token: str = None, db: Session = 
                 from app.models.code_review import CodeReview, ReviewSource
                 db_review = CodeReview(
                     user_id=user.id,
-                    language=language,
+                    language=lang_enum,
                     original_code=code,
                     bugs_found=[bug.model_dump() for bug in structured_res.bugs_found] if hasattr(structured_res, "bugs_found") else None,
                     severity_summary=structured_res.severity_summary.model_dump() if hasattr(structured_res, "severity_summary") else None,
