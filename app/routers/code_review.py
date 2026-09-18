@@ -38,14 +38,14 @@ def get_code_review_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
-    # Total reviews
+    
     total_reviews = db.query(CodeReview).count()
     
-    # Average quality score
+    
     avg_score_res = db.query(func.avg(CodeReview.quality_score)).scalar()
     average_quality_score = float(avg_score_res) if avg_score_res is not None else 0.0
 
-    # Counts by language
+    
     lang_counts = db.query(CodeReview.language, func.count(CodeReview.id)).group_by(CodeReview.language).all()
     language_distribution = {
         lang.value if hasattr(lang, "value") else str(lang): count for lang, count in lang_counts
