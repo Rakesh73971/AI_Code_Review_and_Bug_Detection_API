@@ -51,13 +51,13 @@ def get_code_review_analytics(
         lang.value if hasattr(lang, "value") else str(lang): count for lang, count in lang_counts
     }
 
-    # Counts by source (MANUAL vs. GITHUB_PR)
+    
     src_counts = db.query(CodeReview.source, func.count(CodeReview.id)).group_by(CodeReview.source).all()
     source_distribution = {
         src.value if hasattr(src, "value") else str(src): count for src, count in src_counts
     }
 
-    # Get severity counts from JSON summaries
+    
     all_reviews = db.query(CodeReview.severity_summary).all()
     severity_totals = {"critical": 0, "warning": 0, "info": 0}
     for (summary,) in all_reviews:
